@@ -24,20 +24,20 @@ const ensureCaseAccess = (caseDoc, user) => {
 };
 
 export const createCaseValidation = [
-  body('clientName').trim().isLength({ min: 2, max: 120 }),
-  body('subjectName').trim().isLength({ min: 2, max: 120 }),
-  body('caseType').isIn(CASE_TYPES),
-  body('dueDate').isISO8601().toDate(),
-  body('assignedAgent').optional({ nullable: true, checkFalsy: true }).isMongoId(),
+  body('clientName').trim().isLength({ min: 2, max: 120 }).withMessage('Client name must be 2 to 120 characters'),
+  body('subjectName').trim().isLength({ min: 2, max: 120 }).withMessage('Subject name must be 2 to 120 characters'),
+  body('caseType').isIn(CASE_TYPES).withMessage('Select a valid case type'),
+  body('dueDate').isISO8601().withMessage('Due date must be a valid date').toDate(),
+  body('assignedAgent').optional({ nullable: true, checkFalsy: true }).isMongoId().withMessage('Select a valid agent'),
   validate
 ];
 
 export const listCasesValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
-  query('limit').optional().isInt({ min: 1, max: 50 }).toInt(),
-  query('status').optional().isIn(CASE_STATUSES),
-  query('agent').optional().isMongoId(),
-  query('search').optional().trim().isLength({ max: 80 }),
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be 1 or greater').toInt(),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50').toInt(),
+  query('status').optional().isIn(CASE_STATUSES).withMessage('Select a valid status'),
+  query('agent').optional().isMongoId().withMessage('Select a valid agent'),
+  query('search').optional().trim().isLength({ max: 80 }).withMessage('Search must be 80 characters or less'),
   validate
 ];
 
@@ -45,21 +45,21 @@ export const idValidation = [param('id').isMongoId().withMessage(objectIdMessage
 
 export const commentValidation = [
   param('id').isMongoId().withMessage(objectIdMessage),
-  body('body').trim().isLength({ min: 1, max: 2000 }),
+  body('body').trim().isLength({ min: 1, max: 2000 }).withMessage('Comment must be 1 to 2000 characters'),
   validate
 ];
 
 export const transitionValidation = [
   param('id').isMongoId().withMessage(objectIdMessage),
-  body('toStatus').isIn(CASE_STATUSES),
-  body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }),
+  body('toStatus').isIn(CASE_STATUSES).withMessage('Select a valid target status'),
+  body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('Note must be 500 characters or less'),
   validate
 ];
 
 export const assignValidation = [
   param('id').isMongoId().withMessage(objectIdMessage),
-  body('agentId').isMongoId(),
-  body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }),
+  body('agentId').isMongoId().withMessage('Select a valid agent'),
+  body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('Note must be 500 characters or less'),
   validate
 ];
 
@@ -70,7 +70,7 @@ export const createCase = async (req, res, next) => {
 
     if (req.body.assignedAgent) {
       assignedAgent = await User.findOne({ _id: req.body.assignedAgent, role: 'agent', active: true });
-      if (!assignedAgent) return res.status(422).json({ message: 'Assigned agent was not found' });
+      if (!assignedAgent) return res.status(422).json({ code: 'AGENT_NOT_FOUND', message: 'Assigned agent was not found' });
       status = 'Assigned';
     }
 
@@ -129,11 +129,93 @@ export const listCases = async (req, res, next) => {
   }
 };
 
+export const getDashboard = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const dueSoonLimit = new Date(now);
+    dueSoonLimit.setDate(dueSoonLimit.getDate() + 7);
+
+    const filter = {};
+    if (req.user.role === 'agent') filter.assignedAgent = req.user._id;
+
+    const [statusGroups, total, overdue, dueSoon, recentCases, agentWorkload] = await Promise.all([
+      Case.aggregate([
+        { $match: filter },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      Case.countDocuments(filter),
+      Case.countDocuments({
+        ...filter,
+        dueDate: { $lt: now },
+        status: { $nin: ['Cleared'] }
+      }),
+      Case.countDocuments({
+        ...filter,
+        dueDate: { $gte: now, $lte: dueSoonLimit },
+        status: { $nin: ['Cleared'] }
+      }),
+      populateCase(Case.find(filter).sort({ updatedAt: -1 }).limit(6)),
+      req.user.role === 'manager'
+        ? User.aggregate([
+            { $match: { role: 'agent', active: true } },
+            {
+              $lookup: {
+                from: 'cases',
+                localField: '_id',
+                foreignField: 'assignedAgent',
+                as: 'cases'
+              }
+            },
+            {
+              $project: {
+                name: 1,
+                email: 1,
+                total: { $size: '$cases' },
+                active: {
+                  $size: {
+                    $filter: {
+                      input: '$cases',
+                      as: 'caseItem',
+                      cond: { $in: ['$$caseItem.status', ['Assigned', 'In Progress', 'Submitted', 'Discrepant']] }
+                    }
+                  }
+                }
+              }
+            },
+            { $sort: { active: -1, name: 1 } }
+          ])
+        : Promise.resolve([])
+    ]);
+
+    const statusCounts = CASE_STATUSES.reduce((acc, status) => {
+      acc[status] = 0;
+      return acc;
+    }, {});
+    statusGroups.forEach((item) => {
+      statusCounts[item._id] = item.count;
+    });
+
+    res.json({
+      stats: {
+        total,
+        overdue,
+        dueSoon,
+        pendingReview: statusCounts.Submitted,
+        statusCounts
+      },
+      recentCases,
+      agentWorkload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getCase = async (req, res, next) => {
   try {
     const caseDoc = await populateCase(Case.findById(req.params.id));
-    if (!caseDoc) return res.status(404).json({ message: 'Case not found' });
-    if (!ensureCaseAccess(caseDoc, req.user)) return res.status(403).json({ message: 'Access denied' });
+    if (!caseDoc) return res.status(404).json({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
+    if (!ensureCaseAccess(caseDoc, req.user)) return res.status(403).json({ code: 'ACCESS_DENIED', message: 'Access denied' });
 
     res.json({
       case: caseDoc,
@@ -151,10 +233,10 @@ export const assignCase = async (req, res, next) => {
       User.findOne({ _id: req.body.agentId, role: 'agent', active: true })
     ]);
 
-    if (!caseDoc) return res.status(404).json({ message: 'Case not found' });
-    if (!agent) return res.status(422).json({ message: 'Agent was not found' });
+    if (!caseDoc) return res.status(404).json({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
+    if (!agent) return res.status(422).json({ code: 'AGENT_NOT_FOUND', message: 'Agent was not found' });
     if (!canTransition(req.user.role, caseDoc.status, 'Assigned')) {
-      return res.status(409).json({ message: `Cannot assign from ${caseDoc.status}` });
+      return res.status(409).json({ code: 'INVALID_STATUS_TRANSITION', message: `Cannot assign from ${caseDoc.status}` });
     }
 
     const fromStatus = caseDoc.status;
@@ -174,13 +256,13 @@ export const assignCase = async (req, res, next) => {
 export const transitionCase = async (req, res, next) => {
   try {
     const caseDoc = await Case.findById(req.params.id);
-    if (!caseDoc) return res.status(404).json({ message: 'Case not found' });
-    if (!ensureCaseAccess(caseDoc, req.user)) return res.status(403).json({ message: 'Access denied' });
+    if (!caseDoc) return res.status(404).json({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
+    if (!ensureCaseAccess(caseDoc, req.user)) return res.status(403).json({ code: 'ACCESS_DENIED', message: 'Access denied' });
     if (!canTransition(req.user.role, caseDoc.status, req.body.toStatus)) {
-      return res.status(409).json({ message: `Cannot move ${caseDoc.status} to ${req.body.toStatus}` });
+      return res.status(409).json({ code: 'INVALID_STATUS_TRANSITION', message: `Cannot move ${caseDoc.status} to ${req.body.toStatus}` });
     }
     if (req.body.toStatus === 'Submitted' && caseDoc.documents.length === 0) {
-      return res.status(422).json({ message: 'Upload at least one document before submitting' });
+      return res.status(422).json({ code: 'DOCUMENT_REQUIRED', message: 'Upload at least one document before submitting' });
     }
 
     const fromStatus = caseDoc.status;
@@ -201,8 +283,8 @@ export const transitionCase = async (req, res, next) => {
 export const addComment = async (req, res, next) => {
   try {
     const caseDoc = await Case.findById(req.params.id);
-    if (!caseDoc) return res.status(404).json({ message: 'Case not found' });
-    if (!ensureCaseAccess(caseDoc, req.user)) return res.status(403).json({ message: 'Access denied' });
+    if (!caseDoc) return res.status(404).json({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
+    if (!ensureCaseAccess(caseDoc, req.user)) return res.status(403).json({ code: 'ACCESS_DENIED', message: 'Access denied' });
 
     caseDoc.comments.push({ body: req.body.body, author: req.user._id });
     await caseDoc.save();
@@ -219,17 +301,17 @@ export const uploadDocument = async (req, res, next) => {
     const caseDoc = await Case.findById(req.params.id);
     if (!caseDoc) {
       if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(404).json({ message: 'Case not found' });
+      return res.status(404).json({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
     }
     if (!ensureCaseAccess(caseDoc, req.user)) {
       if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({ code: 'ACCESS_DENIED', message: 'Access denied' });
     }
     if (req.user.role === 'agent' && !['Assigned', 'In Progress'].includes(caseDoc.status)) {
       if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(409).json({ message: `Cannot upload documents while case is ${caseDoc.status}` });
+      return res.status(409).json({ code: 'INVALID_UPLOAD_STATUS', message: `Cannot upload documents while case is ${caseDoc.status}` });
     }
-    if (!req.file) return res.status(422).json({ message: 'A PDF or image file is required' });
+    if (!req.file) return res.status(422).json({ code: 'FILE_REQUIRED', message: 'A PDF or image file is required' });
 
     caseDoc.documents.push({
       originalName: req.file.originalname,

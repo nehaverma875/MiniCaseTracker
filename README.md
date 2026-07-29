@@ -4,7 +4,12 @@ A responsive MERN app for replacing a spreadsheet-based ops workflow. Managers c
 
 ## Stack
 
-- React + Vite + MUI
+- React + Vite + Material UI
+- React Router DOM
+- Redux Toolkit + RTK Query
+- React Hook Form
+- Day.js
+- React Hot Toast
 - Node.js + Express
 - MongoDB + Mongoose
 - JWT authentication
@@ -21,6 +26,10 @@ A responsive MERN app for replacing a spreadsheet-based ops workflow. Managers c
 - Search, status filter, agent filter for managers, and pagination
 - Case detail page with timeline, comments, documents, and audit log
 - Responsive UI for phone, tablet, laptop, and desktop
+- Centralized API cache and mutations with RTK Query
+- Client-side form handling with React Hook Form
+- Consistent date formatting with Day.js
+- Toast feedback for login, create case, upload, comments, assignment, and verdict updates
 - Seeded test credentials
 - Postman collection and backend Dockerfile included
 
@@ -28,9 +37,9 @@ A responsive MERN app for replacing a spreadsheet-based ops workflow. Managers c
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Manager | `manager@example.com` | `Password123!` |
-| Agent | `agent@example.com` | `Password123!` |
-| Agent | `priya.agent@example.com` | `Password123!` |
+| Manager | `manager@test.com` | `password` |
+| Agent | `agent@test.com` | `password` |
+| Agent | `priya@test.com` | `password` |
 
 ## Local Setup
 

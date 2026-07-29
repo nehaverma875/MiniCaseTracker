@@ -1,62 +1,85 @@
-import { format } from 'date-fns';
-import { ArrowLeft, CheckCircle2, Send, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getErrorMessage, http, UPLOAD_BASE_URL } from '../api/http';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControl,
+  InputLabel,
+  Link,
+  LinearProgress,
+  MenuItem,
+  Select,
+  Stack,
+  Step,
+  StepLabel,
+  Stepper,
+  TextField,
+  Typography
+} from '@mui/material';
+import Grid from '@mui/material/Grid2';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckCircleIcon from '@mui/icons-material/CheckCircleOutline';
+import SendIcon from '@mui/icons-material/Send';
+import UploadIcon from '@mui/icons-material/UploadFile';
+import toast from 'react-hot-toast';
+import { useSelector } from 'react-redux';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  getErrorMessage,
+  UPLOAD_BASE_URL,
+  useAddCommentMutation,
+  useAssignCaseMutation,
+  useGetAgentsQuery,
+  useGetCaseQuery,
+  useUpdateCaseStatusMutation,
+  useUploadDocumentMutation
+} from '../api/apiSlice';
 import { StatusChip } from '../components/StatusChip';
-import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Field, Select, Textarea } from '../components/ui';
-import { useAuth } from '../context/AuthContext';
-import { getCaseIdFromPath, useRouter } from '../context/RouterContext';
+import { formatDate, formatDateTime } from '../utils/date';
 import { statuses } from '../utils/status';
 
 export const CaseDetailPage = () => {
-  const { path, navigate } = useRouter();
-  const id = getCaseIdFromPath(path);
-  const { user } = useAuth();
-  const [caseItem, setCaseItem] = useState(null);
-  const [allowedTransitions, setAllowedTransitions] = useState([]);
-  const [agents, setAgents] = useState([]);
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const user = useSelector((state) => state.auth.user);
   const [comment, setComment] = useState('');
   const [note, setNote] = useState('');
   const [agentId, setAgentId] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewStatus, setReviewStatus] = useState('Cleared');
-  const [error, setError] = useState('');
+  const { data, error, isLoading } = useGetCaseQuery(id);
+  const { data: agentsData } = useGetAgentsQuery(undefined, { skip: user.role !== 'manager' });
+  const [addCommentMutation, { isLoading: addingComment }] = useAddCommentMutation();
+  const [uploadDocument, { isLoading: uploadingDocument }] = useUploadDocumentMutation();
+  const [updateCaseStatus, { isLoading: changingStatus }] = useUpdateCaseStatusMutation();
+  const [assignCase, { isLoading: assigningCase }] = useAssignCaseMutation();
 
-  const loadCase = async () => {
-    setError('');
-    try {
-      const { data } = await http.get(`/cases/${id}`);
-      setCaseItem(data.case);
-      setAllowedTransitions(data.allowedTransitions);
-      setAgentId(data.case.assignedAgent?._id || '');
-    } catch (err) {
-      setError(getErrorMessage(err));
-    }
-  };
+  const caseItem = data?.case;
+  const allowedTransitions = data?.allowedTransitions || [];
+  const agents = agentsData?.agents || [];
 
   useEffect(() => {
-    loadCase();
-  }, [id]);
-
-  useEffect(() => {
-    if (user.role !== 'manager') return;
-    http.get('/users/agents').then(({ data }) => setAgents(data.agents));
-  }, [user.role]);
-
-  const refreshFromResponse = ({ data }) => {
-    setCaseItem(data.case);
-    setError('');
-  };
+    if (caseItem) setAgentId(caseItem.assignedAgent?._id || '');
+  }, [caseItem]);
 
   const addComment = async (event) => {
     event.preventDefault();
     if (!comment.trim()) return;
     try {
-      refreshFromResponse(await http.post(`/cases/${id}/comments`, { body: comment }));
+      await addCommentMutation({ id, body: comment.trim() }).unwrap();
+      toast.success('Comment added');
       setComment('');
     } catch (err) {
-      setError(getErrorMessage(err));
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -66,10 +89,10 @@ export const CaseDetailPage = () => {
     const data = new FormData();
     data.append('document', file);
     try {
-      refreshFromResponse(await http.post(`/cases/${id}/documents`, data));
-      await loadCase();
+      await uploadDocument({ id, formData: data }).unwrap();
+      toast.success('Document uploaded');
     } catch (err) {
-      setError(getErrorMessage(err));
+      toast.error(getErrorMessage(err));
     } finally {
       event.target.value = '';
     }
@@ -77,263 +100,269 @@ export const CaseDetailPage = () => {
 
   const transition = async (toStatus, transitionNote = '') => {
     try {
-      refreshFromResponse(await http.patch(`/cases/${id}/status`, { toStatus, note: transitionNote }));
-      await loadCase();
+      await updateCaseStatus({ id, toStatus, note: transitionNote }).unwrap();
+      toast.success(`Case moved to ${toStatus}`);
       setReviewOpen(false);
       setNote('');
     } catch (err) {
-      setError(getErrorMessage(err));
+      toast.error(getErrorMessage(err));
     }
   };
 
   const assign = async (event) => {
     event.preventDefault();
     try {
-      refreshFromResponse(await http.patch(`/cases/${id}/assign`, { agentId, note }));
-      await loadCase();
+      await assignCase({ id, agentId, note }).unwrap();
+      toast.success('Case assigned');
       setAssignOpen(false);
       setNote('');
     } catch (err) {
-      setError(getErrorMessage(err));
+      toast.error(getErrorMessage(err));
     }
   };
 
-  if (error && !caseItem) return <Alert variant="error">{error}</Alert>;
-  if (!caseItem) return <Alert>Loading case...</Alert>;
+  if (error && !caseItem) return <Alert severity="error">{getErrorMessage(error)}</Alert>;
+  if (isLoading || !caseItem) return <Alert severity="info">Loading case...</Alert>;
 
   const activeStep = Math.max(0, statuses.indexOf(caseItem.status));
   const canUpload = user.role === 'agent' && ['Assigned', 'In Progress'].includes(caseItem.status);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
-          <Button variant="ghost" className="px-0" onClick={() => navigate('/cases')}>
-            <ArrowLeft className="h-4 w-4" />
+    <Stack spacing={3}>
+      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
+        <Box>
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/cases')} sx={{ mb: 1 }}>
             Back
           </Button>
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight">{caseItem.subjectName}</h1>
-              <StatusChip status={caseItem.status} />
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {caseItem.clientName} / {caseItem.caseType} / Due {format(new Date(caseItem.dueDate), 'dd MMM yyyy')}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+            <Typography variant="h4" fontWeight={800}>
+              {caseItem.subjectName}
+            </Typography>
+            <StatusChip status={caseItem.status} />
+          </Stack>
+          <Typography color="text.secondary">
+            {caseItem.clientName} / {caseItem.caseType} / Due {formatDate(caseItem.dueDate)}
+          </Typography>
+        </Box>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
           {user.role === 'manager' && allowedTransitions.includes('Assigned') && (
-            <Button onClick={() => setAssignOpen(true)}>Assign</Button>
+            <Button variant="contained" onClick={() => setAssignOpen(true)} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+              Assign
+            </Button>
           )}
           {user.role === 'manager' && caseItem.status === 'Submitted' && (
-            <Button onClick={() => setReviewOpen(true)}>
-              <CheckCircle2 className="h-4 w-4" />
+            <Button variant="contained" startIcon={<CheckCircleIcon />} onClick={() => setReviewOpen(true)} sx={{ width: { xs: '100%', sm: 'auto' } }}>
               Review
             </Button>
           )}
           {user.role === 'agent' && allowedTransitions.includes('In Progress') && (
-            <Button variant="outline" onClick={() => transition('In Progress')}>Start work</Button>
+            <Button variant="outlined" onClick={() => transition('In Progress')} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+              Start work
+            </Button>
           )}
           {user.role === 'agent' && allowedTransitions.includes('Submitted') && (
-            <Button onClick={() => transition('Submitted')}>
-              <Send className="h-4 w-4" />
+            <Button variant="contained" startIcon={<SendIcon />} onClick={() => transition('Submitted')} sx={{ width: { xs: '100%', sm: 'auto' } }}>
               Submit
             </Button>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
-      {error && <Alert variant="error">{error}</Alert>}
+      {error && <Alert severity="error">{getErrorMessage(error)}</Alert>}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Status timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="hidden items-center md:flex">
-                {statuses.map((status, index) => {
-                  const complete = index <= activeStep;
-                  return (
-                    <div className="flex flex-1 items-center" key={status}>
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className={`grid h-8 w-8 place-items-center rounded-full border text-xs font-semibold ${complete ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-500'}`}>
-                          {index + 1}
-                        </div>
-                        <span className={`text-xs font-medium ${status === caseItem.status ? 'text-slate-950' : 'text-slate-500'}`}>{status}</span>
-                      </div>
-                      {index < statuses.length - 1 && <div className={`mx-3 h-px flex-1 ${index < activeStep ? 'bg-blue-600' : 'bg-slate-200'}`} />}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="grid gap-3 md:hidden">
-                {statuses.map((status, index) => (
-                  <div className="flex items-center gap-3" key={status}>
-                    <div className={`h-3 w-3 rounded-full ${index <= activeStep ? 'bg-blue-600' : 'bg-slate-300'}`} />
-                    <span className={`text-sm ${status === caseItem.status ? 'font-semibold text-slate-950' : 'text-slate-500'}`}>{status}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Documents</CardTitle>
-              {canUpload && (
-                <Button variant="outline" size="sm" className="relative">
-                  <Upload className="h-4 w-4" />
-                  Upload
-                  <input className="absolute inset-0 cursor-pointer opacity-0" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={uploadFile} />
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {caseItem.documents.length === 0 && <Alert>No documents uploaded yet.</Alert>}
-              {caseItem.documents.map((doc) => (
-                <div key={doc._id} className="flex flex-col justify-between gap-2 rounded-md border border-slate-200 p-3 sm:flex-row">
-                  <div>
-                    <a className="font-semibold text-blue-700 hover:underline" href={`${UPLOAD_BASE_URL}${doc.path}`} target="_blank" rel="noreferrer">
-                      {doc.originalName}
-                    </a>
-                    <p className="mt-1 text-sm text-slate-500">Uploaded by {doc.uploadedBy?.name} / {Math.ceil(doc.size / 1024)} KB</p>
-                  </div>
-                  <p className="text-sm text-slate-500">{format(new Date(doc.createdAt), 'dd MMM yyyy, p')}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Comments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="mb-4 flex flex-col gap-3 sm:flex-row" onSubmit={addComment}>
-                <Textarea
-                  className="min-h-10 sm:min-h-10"
-                  value={comment}
-                  onChange={(event) => setComment(event.target.value)}
-                  placeholder="Add comment"
-                />
-                <Button type="submit">Add</Button>
-              </form>
-              <div className="space-y-3">
-                {caseItem.comments.length === 0 && <p className="text-sm text-slate-500">No comments yet.</p>}
-                {caseItem.comments
-                  .slice()
-                  .reverse()
-                  .map((item) => (
-                    <div key={item._id} className="rounded-md bg-slate-50 p-3">
-                      <p>{item.body}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.author?.name} / {format(new Date(item.createdAt), 'dd MMM yyyy, p')}</p>
-                    </div>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Stack spacing={2}>
+            <Card variant="outlined">
+              <CardHeader title="Status timeline" />
+              <CardContent>
+                <Stepper activeStep={activeStep} alternativeLabel sx={{ display: { xs: 'none', md: 'flex' } }}>
+                  {statuses.map((status) => (
+                    <Step key={status}>
+                      <StepLabel>{status}</StepLabel>
+                    </Step>
                   ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <aside className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Case summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Row label="Client" value={caseItem.clientName} />
-              <Row label="Subject" value={caseItem.subjectName} />
-              <Row label="Agent" value={caseItem.assignedAgent?.name || 'Unassigned'} />
-              <Row label="Created by" value={caseItem.createdBy?.name} />
-              {caseItem.verdictNote && <Row label="Verdict note" value={caseItem.verdictNote} />}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Audit log</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="divide-y divide-slate-200">
-                {caseItem.auditLog
-                  .slice()
-                  .reverse()
-                  .map((item) => (
-                    <div key={item._id} className="py-3 first:pt-0 last:pb-0">
-                      <p className="font-semibold">{item.action}</p>
-                      <p className="text-sm text-slate-500">{item.fromStatus || 'Start'} to {item.toStatus}</p>
-                      {item.note && <p className="mt-1 text-sm">{item.note}</p>}
-                      <p className="mt-1 text-xs text-slate-500">{item.actor?.name} / {format(new Date(item.createdAt), 'dd MMM yyyy, p')}</p>
-                    </div>
+                </Stepper>
+                <Stepper activeStep={activeStep} orientation="vertical" sx={{ display: { xs: 'block', md: 'none' } }}>
+                  {statuses.map((status) => (
+                    <Step key={status}>
+                      <StepLabel>{status}</StepLabel>
+                    </Step>
                   ))}
-              </div>
-            </CardContent>
-          </Card>
-        </aside>
-      </div>
+                </Stepper>
+              </CardContent>
+            </Card>
 
-      <Dialog
-        open={assignOpen}
-        title="Assign case"
-        onClose={() => setAssignOpen(false)}
-        className="max-w-md"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setAssignOpen(false)}>Cancel</Button>
-            <Button type="submit" form="assign-case-form">Assign</Button>
-          </>
-        }
-      >
-        <form id="assign-case-form" className="grid gap-4" onSubmit={assign}>
-          <Field label="Agent">
-            <Select required value={agentId} onChange={(event) => setAgentId(event.target.value)}>
-              <option value="" disabled>Select agent</option>
-              {agents.map((agent) => (
-                <option value={agent.id} key={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Note">
-            <Textarea value={note} onChange={(event) => setNote(event.target.value)} />
-          </Field>
-        </form>
+            <Card variant="outlined">
+              <CardHeader
+                title="Documents"
+                action={
+                  canUpload && (
+                    <Button component="label" variant="outlined" startIcon={<UploadIcon />} disabled={uploadingDocument}>
+                      {uploadingDocument ? 'Uploading...' : 'Upload'}
+                      <input hidden type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={uploadFile} />
+                    </Button>
+                  )
+                }
+              />
+              <CardContent>
+                <Stack spacing={1.5}>
+                  {uploadingDocument && <LinearProgress />}
+                  {caseItem.documents.length === 0 && <Alert severity="info">No documents uploaded yet.</Alert>}
+                  {caseItem.documents.map((doc) => (
+                    <Box key={doc._id} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
+                        <Box>
+                          <Link href={`${UPLOAD_BASE_URL}${doc.path}`} target="_blank" rel="noreferrer" fontWeight={800}>
+                            {doc.originalName}
+                          </Link>
+                          <Typography variant="body2" color="text.secondary">
+                            Uploaded by {doc.uploadedBy?.name} / {Math.ceil(doc.size / 1024)} KB
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDateTime(doc.createdAt)}
+                        </Typography>
+                      </Stack>
+                    </Box>
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+
+            <Card variant="outlined">
+              <CardHeader title="Comments" />
+              <CardContent>
+                <Stack component="form" direction={{ xs: 'column', sm: 'row' }} spacing={1.5} onSubmit={addComment} sx={{ mb: 2 }}>
+                  <TextField label="Add comment" value={comment} onChange={(event) => setComment(event.target.value)} multiline minRows={1} fullWidth />
+                  <Button type="submit" variant="contained" disabled={addingComment}>
+                    Add
+                  </Button>
+                </Stack>
+                <Stack spacing={1.5}>
+                  {caseItem.comments.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      No comments yet.
+                    </Typography>
+                  )}
+                  {caseItem.comments
+                    .slice()
+                    .reverse()
+                    .map((item) => (
+                      <Box key={item._id} sx={{ bgcolor: '#f8fafc', borderRadius: 1, p: 1.5 }}>
+                        <Typography>{item.body}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {item.author?.name} / {formatDateTime(item.createdAt)}
+                        </Typography>
+                      </Box>
+                    ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Stack>
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Stack spacing={2}>
+            <Card variant="outlined">
+              <CardHeader title="Case summary" />
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Row label="Client" value={caseItem.clientName} />
+                  <Row label="Subject" value={caseItem.subjectName} />
+                  <Row label="Agent" value={caseItem.assignedAgent?.name || 'Unassigned'} />
+                  <Row label="Created by" value={caseItem.createdBy?.name} />
+                  {caseItem.verdictNote && <Row label="Verdict note" value={caseItem.verdictNote} />}
+                </Stack>
+              </CardContent>
+            </Card>
+
+            <Card variant="outlined">
+              <CardHeader title="Audit log" />
+              <CardContent>
+                <Stack divider={<Divider />} spacing={1}>
+                  {caseItem.auditLog
+                    .slice()
+                    .reverse()
+                    .map((item) => (
+                      <Box key={item._id} sx={{ py: 1 }}>
+                        <Typography fontWeight={800}>{item.action}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {item.fromStatus || 'Start'} to {item.toStatus}
+                        </Typography>
+                        {item.note && <Typography variant="body2">{item.note}</Typography>}
+                        <Typography variant="caption" color="text.secondary">
+                          {item.actor?.name} / {formatDateTime(item.createdAt)}
+                        </Typography>
+                      </Box>
+                    ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Stack>
+        </Grid>
+      </Grid>
+
+      <Dialog open={assignOpen} onClose={() => setAssignOpen(false)} fullWidth maxWidth="sm">
+        <Stack component="form" onSubmit={assign}>
+          <DialogTitle>Assign case</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <FormControl fullWidth required>
+                <InputLabel>Agent</InputLabel>
+                <Select label="Agent" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+                  <MenuItem value="" disabled>Select agent</MenuItem>
+                  {agents.map((agent) => (
+                    <MenuItem value={agent.id} key={agent.id}>
+                      {agent.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField label="Note" value={note} onChange={(event) => setNote(event.target.value)} multiline minRows={3} fullWidth />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAssignOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={assigningCase}>
+              Assign
+            </Button>
+          </DialogActions>
+        </Stack>
       </Dialog>
 
-      <Dialog
-        open={reviewOpen}
-        title="Review submission"
-        onClose={() => setReviewOpen(false)}
-        className="max-w-md"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setReviewOpen(false)}>Cancel</Button>
-            <Button onClick={() => transition(reviewStatus, note)}>Save verdict</Button>
-          </>
-        }
-      >
-        <div className="grid gap-4">
-          <Field label="Verdict">
-            <Select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value)}>
-              <option value="Cleared">Cleared</option>
-              <option value="Discrepant">Discrepant</option>
-            </Select>
-          </Field>
-          <Field label="Verdict note">
-            <Textarea value={note} onChange={(event) => setNote(event.target.value)} />
-          </Field>
-        </div>
+      <Dialog open={reviewOpen} onClose={() => setReviewOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Review submission</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel>Verdict</InputLabel>
+              <Select label="Verdict" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value)}>
+                <MenuItem value="Cleared">Cleared</MenuItem>
+                <MenuItem value="Discrepant">Discrepant</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField label="Verdict note" value={note} onChange={(event) => setNote(event.target.value)} multiline minRows={3} fullWidth />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReviewOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => transition(reviewStatus, note)} disabled={changingStatus}>
+            Save verdict
+          </Button>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Stack>
   );
 };
 
 const Row = ({ label, value }) => (
-  <div className="flex justify-between gap-4 text-sm">
-    <span className="text-slate-500">{label}</span>
-    <span className="max-w-[60%] text-right font-semibold">{value}</span>
-  </div>
+  <Stack direction="row" justifyContent="space-between" spacing={2}>
+    <Typography variant="body2" color="text.secondary">
+      {label}
+    </Typography>
+    <Typography variant="body2" fontWeight={800} textAlign="right">
+      {value}
+    </Typography>
+  </Stack>
 );

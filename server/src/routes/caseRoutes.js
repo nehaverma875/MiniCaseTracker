@@ -6,6 +6,7 @@ import {
   commentValidation,
   createCase,
   createCaseValidation,
+  getDashboard,
   getCase,
   idValidation,
   listCases,
@@ -22,8 +23,9 @@ export const caseRouter = express.Router();
 caseRouter.use(requireAuth);
 caseRouter.get('/', listCasesValidation, listCases);
 caseRouter.post('/', requireRole('manager'), createCaseValidation, createCase);
+caseRouter.get('/dashboard', getDashboard);
 caseRouter.get('/:id', idValidation, getCase);
 caseRouter.patch('/:id/assign', requireRole('manager'), assignValidation, assignCase);
 caseRouter.patch('/:id/status', transitionValidation, transitionCase);
 caseRouter.post('/:id/comments', commentValidation, addComment);
-caseRouter.post('/:id/documents', idValidation, upload.single('document'), uploadDocument);
+caseRouter.post('/:id/documents', requireRole('agent'), idValidation, upload.single('document'), uploadDocument);

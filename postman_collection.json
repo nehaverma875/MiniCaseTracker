@@ -17,7 +17,7 @@
         "url": "{{baseUrl}}/auth/login",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"manager@example.com\",\n  \"password\": \"Password123!\"\n}"
+          "raw": "{\n  \"email\": \"manager@test.com\",\n  \"password\": \"password\"\n}"
         }
       }
     },

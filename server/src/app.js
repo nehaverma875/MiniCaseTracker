@@ -30,15 +30,23 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/cases', caseRouter);
 
-app.use((req, res) => res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` }));
+app.use((req, res) =>
+  res.status(404).json({
+    code: 'NOT_FOUND',
+    message: `Route not found: ${req.method} ${req.originalUrl}`
+  })
+);
 
 app.use((error, _req, res, _next) => {
   if (error.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ message: 'File must be 8MB or smaller' });
+    return res.status(413).json({ code: 'FILE_TOO_LARGE', message: 'File must be 8MB or smaller' });
   }
   if (error.message === 'Unexpected field') {
-    return res.status(422).json({ message: 'Upload field must be named document' });
+    return res.status(422).json({ code: 'UPLOAD_FIELD_INVALID', message: 'Upload field must be named document' });
   }
   console.error(error);
-  return res.status(error.status || 500).json({ message: error.message || 'Something went wrong' });
+  return res.status(error.status || 500).json({
+    code: error.code || 'SERVER_ERROR',
+    message: error.message || 'Something went wrong'
+  });
 });

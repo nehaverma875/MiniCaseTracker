@@ -3,6 +3,7 @@ dist
 .env
 .DS_Store
 coverage
+.mongo-data/
 server/src/uploads/*
 !server/src/uploads/.gitkeep
 !server/src/uploads/sample-address-proof.pdf

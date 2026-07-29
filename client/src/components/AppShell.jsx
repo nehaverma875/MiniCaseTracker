@@ -1,76 +1,122 @@
-import { BriefcaseBusiness, LogOut, Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useRouter } from '../context/RouterContext';
-import { Button } from './ui';
+import {
+  AppBar,
+  Avatar,
+  Box,
+  Button,
+  Container,
+  Divider,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Stack,
+  Toolbar,
+  Typography
+} from '@mui/material';
+import BriefcaseIcon from '@mui/icons-material/WorkOutline';
+import DashboardIcon from '@mui/icons-material/DashboardOutlined';
+import LogoutIcon from '@mui/icons-material/Logout';
+import MenuIcon from '@mui/icons-material/Menu';
+import CloseIcon from '@mui/icons-material/Close';
+import { useDispatch, useSelector } from 'react-redux';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { apiSlice } from '../api/apiSlice';
+import { logout } from '../features/auth/authSlice';
 
 export const AppShell = ({ children }) => {
-  const { user, logout } = useAuth();
-  const { navigate } = useRouter();
+  const user = useSelector((state) => state.auth.user);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
 
-  const actions = (
-    <div className="flex flex-col gap-2 md:flex-row">
-      <Button variant="ghost" onClick={() => navigate('/cases')}>
-        <BriefcaseBusiness className="h-4 w-4" />
-        Cases
-      </Button>
-      <Button
-        variant="ghost"
-        onClick={() => {
-          logout();
-          navigate('/login');
-        }}
-      >
-        <LogOut className="h-4 w-4" />
-        Sign out
-      </Button>
-    </div>
+  const navItems = [
+    { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
+    { label: 'Cases', path: '/cases', icon: <BriefcaseIcon /> }
+  ];
+
+  const goTo = (to) => {
+    navigate(to);
+    setOpen(false);
+  };
+
+  const signOut = () => {
+    dispatch(logout());
+    dispatch(apiSlice.util.resetApiState());
+    navigate('/login');
+    setOpen(false);
+  };
+
+  const navList = (
+    <Box sx={{ width: 280 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2 }}>
+        <Box>
+          <Typography fontWeight={800}>Mini Case Tracker</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {user?.email}
+          </Typography>
+        </Box>
+        <IconButton onClick={() => setOpen(false)} aria-label="Close menu">
+          <CloseIcon />
+        </IconButton>
+      </Stack>
+      <Divider />
+      <List>
+        {navItems.map((item) => (
+          <ListItemButton key={item.path} selected={pathname === item.path || pathname.startsWith(`${item.path}/`)} onClick={() => goTo(item.path)}>
+            <ListItemIcon>{item.icon}</ListItemIcon>
+            <ListItemText primary={item.label} />
+          </ListItemButton>
+        ))}
+        <ListItemButton onClick={signOut}>
+          <ListItemIcon>
+            <LogoutIcon />
+          </ListItemIcon>
+          <ListItemText primary="Sign out" />
+        </ListItemButton>
+      </List>
+    </Box>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-          <Button variant="ghost" className="h-9 w-9 p-0 md:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
-            <Menu className="h-5 w-5" />
-          </Button>
-          <div className="flex flex-1 items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">M</div>
-            <div>
-              <div className="text-base font-semibold leading-none">
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+      <AppBar position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Toolbar>
+          <IconButton edge="start" onClick={() => setOpen(true)} sx={{ mr: 1, display: { md: 'none' } }} aria-label="Open menu">
+            <MenuIcon />
+          </IconButton>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexGrow: 1 }}>
+            <Avatar sx={{ bgcolor: 'primary.main', width: 38, height: 38 }}>M</Avatar>
+            <Box>
+              <Typography fontWeight={800} lineHeight={1}>
                 Mini Case Tracker
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
                 {user?.name} / {user?.role}
-              </div>
-            </div>
-          </div>
-          <div className="hidden md:block">{actions}</div>
-        </div>
-      </header>
-
-      {open && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button className="absolute inset-0 bg-slate-950/40" type="button" aria-label="Close menu" onClick={() => setOpen(false)} />
-          <aside className="relative h-full w-72 border-r border-slate-200 bg-white p-4 shadow-xl">
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="font-semibold">Mini Case Tracker</div>
-                <div className="mt-1 text-sm text-slate-500">{user?.email}</div>
-              </div>
-              <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => setOpen(false)} aria-label="Close menu">
-                <X className="h-4 w-4" />
+              </Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', md: 'flex' } }}>
+            {navItems.map((item) => (
+              <Button key={item.path} color="inherit" startIcon={item.icon} onClick={() => goTo(item.path)}>
+                {item.label}
               </Button>
-            </div>
-            <div className="border-t border-slate-200 pt-4">{actions}</div>
-          </aside>
-        </div>
-      )}
-
-      <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+            ))}
+            <Button color="inherit" startIcon={<LogoutIcon />} onClick={signOut}>
+              Sign out
+            </Button>
+          </Stack>
+        </Toolbar>
+      </AppBar>
+      <Drawer open={open} onClose={() => setOpen(false)}>
+        {navList}
+      </Drawer>
+      <Container maxWidth="xl" sx={{ py: 3 }}>
         {children}
-      </main>
-    </div>
+      </Container>
+    </Box>
   );
 };

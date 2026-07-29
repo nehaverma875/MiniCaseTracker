@@ -7,9 +7,9 @@ import { User } from '../models/User.js';
 dotenv.config();
 
 const users = [
-  { name: 'Maya Manager', email: 'manager@example.com', password: 'Password123!', role: 'manager' },
-  { name: 'Arjun Agent', email: 'agent@example.com', password: 'Password123!', role: 'agent' },
-  { name: 'Priya Agent', email: 'priya.agent@example.com', password: 'Password123!', role: 'agent' }
+  { name: 'Maya Manager', email: 'manager@test.com', password: 'password', role: 'manager' },
+  { name: 'Arjun Agent', email: 'agent@test.com', password: 'password', role: 'agent' },
+  { name: 'Priya Agent', email: 'priya@test.com', password: 'password', role: 'agent' }
 ];
 
 const daysFromNow = (days) => {
@@ -113,7 +113,7 @@ const run = async () => {
       name,
       email,
       role,
-      password: 'Password123!'
+      password: 'password'
     }))
   );
 
