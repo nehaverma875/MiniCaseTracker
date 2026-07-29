@@ -1,6 +1,12 @@
-import { Chip } from '@mui/material';
-import { statusColor } from '../utils/status';
+import { Badge } from './ui';
 
-export const StatusChip = ({ status }) => (
-  <Chip size="small" label={status} color={statusColor[status] || 'default'} variant="outlined" sx={{ fontWeight: 700 }} />
-);
+const statusTone = {
+  New: 'default',
+  Assigned: 'blue',
+  'In Progress': 'orange',
+  Submitted: 'purple',
+  Cleared: 'green',
+  Discrepant: 'red'
+};
+
+export const StatusChip = ({ status }) => <Badge tone={statusTone[status] || 'default'}>{status}</Badge>;

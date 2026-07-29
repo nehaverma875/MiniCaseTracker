@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
-import LockIcon from '@mui/icons-material/LockOutlined';
+import { LockKeyhole } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { getErrorMessage, useLoginMutation } from '../api/apiSlice';
+import { getErrorMessage } from '../api/errorUtils';
+import { useLoginMutation } from '../features/auth/authApi';
 import { setCredentials } from '../features/auth/authSlice';
+import { Alert, Button, Card, CardContent, Field, Input } from '../components/ui';
 
 export const LoginPage = () => {
   const user = useSelector((state) => state.auth.user);
@@ -35,58 +36,50 @@ export const LoginPage = () => {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default', p: 2 }}>
-      <Card variant="outlined" sx={{ width: '100%', maxWidth: 420 }}>
-        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
-          <Stack spacing={3} alignItems="center">
-            <Box sx={{ display: 'grid', placeItems: 'center', width: 48, height: 48, borderRadius: '50%', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-              <LockIcon />
-            </Box>
-            <Box textAlign="center">
-              <Typography variant="h5" fontWeight={800}>
+    <div className="page-shell" style={{ display: 'grid', minHeight: '100vh', placeItems: 'center' }}>
+      <Card style={{ width: 'min(420px, 100%)' }}>
+        <CardContent className="stack" style={{ padding: '32px' }}>
+          <div style={{ display: 'grid', justifyItems: 'center', gap: 12, textAlign: 'center' }}>
+            <div className="icon-tile" style={{ borderRadius: 999, background: 'var(--primary)', color: 'white' }}>
+              <LockKeyhole size={24} />
+            </div>
+            <div>
+              <h1 className="card-title" style={{ fontSize: 24 }}>
                 Mini Case Tracker
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
+              </h1>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
                 Sign in to continue
-              </Typography>
-            </Box>
-            {error && (
-              <Alert severity="error" sx={{ width: '100%' }}>
-                {error}
-              </Alert>
-            )}
-            <Stack component="form" spacing={2} onSubmit={submit} sx={{ width: '100%' }}>
-              <TextField
-                label="Email"
+              </p>
+            </div>
+          </div>
+          {error && <Alert variant="error">{error}</Alert>}
+          <form className="stack" onSubmit={submit}>
+            <Field label="Email">
+              <Input
                 type="email"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                 required
-                fullWidth
               />
-              <TextField
-                label="Password"
+            </Field>
+            <Field label="Password">
+              <Input
                 type="password"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
                 required
-                fullWidth
               />
-              <Button type="submit" size="large" variant="contained" disabled={isLoading}>
-                {isLoading ? 'Signing in...' : 'Sign in'}
-              </Button>
-            </Stack>
-            <Box sx={{ width: '100%', bgcolor: '#f1f5f9', borderRadius: 1, p: 1.5 }}>
-              <Typography variant="caption" display="block" color="text.secondary">
-                Manager: manager@test.com / password
-              </Typography>
-              <Typography variant="caption" display="block" color="text.secondary">
-                Agent: agent@test.com / password
-              </Typography>
-            </Box>
-          </Stack>
+            </Field>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </form>
+          <div className="summary-pill muted" style={{ fontSize: 13 }}>
+            <div>Manager: manager@test.com / password</div>
+            <div>Agent: agent@test.com / password</div>
+          </div>
         </CardContent>
       </Card>
-    </Box>
+    </div>
   );
 };

@@ -52,5 +52,10 @@ const caseSchema = new mongoose.Schema(
 );
 
 caseSchema.index({ clientName: 'text', subjectName: 'text', caseType: 'text' });
+caseSchema.index({ updatedAt: -1 });
+caseSchema.index({ status: 1, updatedAt: -1 });
+caseSchema.index({ assignedAgent: 1, updatedAt: -1 });
+caseSchema.index({ assignedAgent: 1, status: 1, updatedAt: -1 });
+caseSchema.index({ dueDate: 1, status: 1 });
 
 export const Case = mongoose.model('Case', caseSchema);

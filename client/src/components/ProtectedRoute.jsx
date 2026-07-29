@@ -1,25 +1,26 @@
 import { useEffect } from 'react';
-import { Box, CircularProgress } from '@mui/material';
 import { Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { useGetMeQuery } from '../api/apiSlice';
 import { logout, setUser } from '../features/auth/authSlice';
+import { useGetMeQuery } from '../features/auth/authApi';
+import { Spinner } from './ui';
 
 export const ProtectedRoute = ({ children, role }) => {
   const { token, user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
-  const { data, error, isLoading } = useGetMeQuery(undefined, { skip: !token });
+  const shouldLoadUser = Boolean(token && !user);
+  const { data, error, isLoading } = useGetMeQuery(undefined, { skip: !shouldLoadUser });
 
   useEffect(() => {
     if (data?.user) dispatch(setUser(data.user));
     if (error) dispatch(logout());
   }, [data, dispatch, error]);
 
-  if (token && (isLoading || !user)) {
+  if (token && !user && isLoading) {
     return (
-      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default' }}>
-        <CircularProgress />
-      </Box>
+      <div className="page-shell" style={{ display: 'grid', minHeight: '100vh', placeItems: 'center' }}>
+        <Spinner />
+      </div>
     );
   }
 

@@ -1,4 +1,5 @@
 import path from 'path';
+import compression from 'compression';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
@@ -14,6 +15,7 @@ dotenv.config();
 export const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(compression());
 app.use(
   cors({
     origin: process.env.CLIENT_URL?.split(',') || 'http://localhost:5173',
@@ -21,11 +23,18 @@ app.use(
   })
 );
 app.use(express.json({ limit: '1mb' }));
-app.use(morgan('dev'));
+if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 500 }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
-app.use('/uploads', express.static(path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'src/uploads')));
+app.use(
+  '/uploads',
+  express.static(path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'src/uploads'), {
+    etag: true,
+    immutable: true,
+    maxAge: '7d'
+  })
+);
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/cases', caseRouter);

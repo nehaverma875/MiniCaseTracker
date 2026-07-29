@@ -4,12 +4,13 @@ A responsive MERN app for replacing a spreadsheet-based ops workflow. Managers c
 
 ## Stack
 
-- React + Vite + Material UI
+- React + Vite + Tailwind CSS + shadcn-style component primitives
 - React Router DOM
 - Redux Toolkit + RTK Query
 - React Hook Form
 - Day.js
 - React Hot Toast
+- Lucide React icons
 - Node.js + Express
 - MongoDB + Mongoose
 - JWT authentication
@@ -56,11 +57,10 @@ npm install
 npm run install:all
 ```
 
-3. Create environment files:
+3. Create the backend environment file:
 
 ```bash
 cp server/.env.example server/.env
-cp client/.env.example client/.env
 ```
 
 4. Update `server/.env` if your MongoDB URI differs.
@@ -77,26 +77,25 @@ npm run dev
 ```
 
 Frontend: http://localhost:5173  
-Backend health: http://localhost:5001/api/health
+Backend health: http://localhost:3500/api/health
+
+For a Lighthouse/performance check, run the production build instead of the Vite dev server:
+
+```bash
+npm run preview
+```
 
 ## Environment Variables
 
 Backend:
 
 ```bash
-PORT=5001
+PORT=3500
 MONGO_URI=mongodb://127.0.0.1:27017/mini_case_tracker
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173
 UPLOAD_DIR=src/uploads
-```
-
-Frontend:
-
-```bash
-VITE_API_URL=http://localhost:5001/api
-VITE_UPLOAD_BASE_URL=http://localhost:5001
 ```
 
 ## Deployment Notes
@@ -114,8 +113,7 @@ Frontend on Vercel/Netlify:
 - Root directory: `client`
 - Build command: `npm run build`
 - Publish directory: `dist`
-- Set `VITE_API_URL` to the deployed backend API URL plus `/api`
-- Set `VITE_UPLOAD_BASE_URL` to the deployed backend base URL
+- Update `client/src/api/config.js` with the deployed backend URL before building.
 
 MongoDB:
 

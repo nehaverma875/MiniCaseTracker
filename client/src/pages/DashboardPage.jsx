@@ -1,33 +1,11 @@
 import { useMemo } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  useMediaQuery,
-  useTheme,
-  Typography
-} from '@mui/material';
-import Grid from '@mui/material/Grid2';
-import AddIcon from '@mui/icons-material/Add';
-import AssignmentIcon from '@mui/icons-material/AssignmentOutlined';
-import ErrorIcon from '@mui/icons-material/ErrorOutline';
-import EventIcon from '@mui/icons-material/EventOutlined';
-import FactCheckIcon from '@mui/icons-material/FactCheckOutlined';
-import GroupsIcon from '@mui/icons-material/GroupsOutlined';
+import { AlertTriangle, CalendarClock, ClipboardList, FileCheck2, Plus, Users } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { getErrorMessage, useGetDashboardQuery } from '../api/apiSlice';
+import { getErrorMessage } from '../api/errorUtils';
+import { Alert, Button, Card, CardContent, CardHeader } from '../components/ui';
 import { StatusChip } from '../components/StatusChip';
+import { useGetDashboardQuery } from '../features/cases/casesApi';
 import { formatDate } from '../utils/date';
 import { statuses } from '../utils/status';
 
@@ -36,217 +14,173 @@ const emptyDashboard = {
   recentCases: [],
   agentWorkload: []
 };
-
-const StatCard = ({ icon, label, value, color = 'primary.main' }) => (
-  <Card variant="outlined" sx={{ height: '100%' }}>
-    <CardContent sx={{ height: '100%' }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
-        <Box>
-          <Typography variant="body2" color="text.secondary" fontWeight={700}>
-            {label}
-          </Typography>
-          <Typography variant="h4" fontWeight={800}>
-            {value}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'grid', placeItems: 'center', width: 44, height: 44, borderRadius: 1, bgcolor: '#f1f5f9', color }}>
-          {icon}
-        </Box>
-      </Stack>
-    </CardContent>
-  </Card>
-);
+const DASHBOARD_ITEM_LIMIT = 10;
 
 export const DashboardPage = () => {
   const user = useSelector((state) => state.auth.user);
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const { data: dashboard = emptyDashboard, error, isLoading } = useGetDashboardQuery();
+  const { data: dashboard = emptyDashboard, error, isFetching } = useGetDashboardQuery();
 
   const statusCards = useMemo(
     () => statuses.map((status) => ({ status, count: dashboard.stats.statusCounts?.[status] || 0 })),
     [dashboard.stats.statusCounts]
   );
-
-  if (isLoading) return <Alert severity="info">Loading dashboard...</Alert>;
+  const recentCases = dashboard.recentCases.slice(0, DASHBOARD_ITEM_LIMIT);
+  const agentWorkload = dashboard.agentWorkload.slice(0, DASHBOARD_ITEM_LIMIT);
 
   return (
-    <Stack spacing={3}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
-        <Box>
-          <Typography variant="h4" fontWeight={800}>
-            Dashboard
-          </Typography>
-          <Typography color="text.secondary">
-            {user.role === 'manager' ? 'Monitor team workload and case health.' : 'Track your assigned case workload.'}
-          </Typography>
-        </Box>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+    <div className="dashboard-page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">{user.role === 'manager' ? 'Monitor team workload and case health.' : 'Track your assigned case workload.'}</p>
+        </div>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
           {user.role === 'manager' && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cases/new')} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+            <Button type="button" onClick={() => navigate('/cases/new')}>
+              <Plus size={20} />
               Create case
             </Button>
           )}
-          <Button variant="outlined" startIcon={<AssignmentIcon />} onClick={() => navigate('/cases')} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+          <Button type="button" variant="outline" onClick={() => navigate('/cases')}>
+            <ClipboardList size={20} />
             View cases
           </Button>
-        </Stack>
-      </Stack>
+        </div>
+      </div>
 
-      {error && <Alert severity="error">{getErrorMessage(error)}</Alert>}
+      <div className="dashboard-alert-slot">
+        {error && <Alert variant="error">{getErrorMessage(error)}</Alert>}
+        {isFetching && !dashboard.stats.total && <Alert>Loading dashboard...</Alert>}
+      </div>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <StatCard icon={<AssignmentIcon />} label="Total cases" value={dashboard.stats.total} />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <StatCard icon={<FactCheckIcon />} label="Pending review" value={dashboard.stats.pendingReview} color="secondary.main" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <StatCard icon={<EventIcon />} label="Due soon" value={dashboard.stats.dueSoon} color="warning.main" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <StatCard icon={<ErrorIcon />} label="Overdue" value={dashboard.stats.overdue} color="error.main" />
-        </Grid>
-      </Grid>
+      <div className="dashboard-metrics">
+        <div className="dashboard-grid">
+          <StatCard icon={<ClipboardList size={22} />} label="Total cases" value={dashboard.stats.total} />
+          <StatCard icon={<FileCheck2 size={22} />} label="Pending review" value={dashboard.stats.pendingReview} />
+          <StatCard icon={<CalendarClock size={22} />} label="Due soon" value={dashboard.stats.dueSoon} />
+          <StatCard icon={<AlertTriangle size={22} />} label="Overdue" value={dashboard.stats.overdue} />
+        </div>
 
-      <Grid container spacing={2}>
-        {statusCards.map(({ status, count }) => (
-          <Grid size={{ xs: 6, sm: 4, lg: 2 }} key={status}>
-            <Card variant="outlined" sx={{ height: '100%' }}>
-              <CardContent>
-                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                  <StatusChip status={status} />
-                  <Typography variant="h6" fontWeight={800}>
-                    {count}
-                  </Typography>
-                </Stack>
-              </CardContent>
+        <div className="stats-grid">
+          {statusCards.map(({ status, count }) => (
+            <Card key={status}>
+              <div className="stat-card" style={{ minHeight: 78 }}>
+                <StatusChip status={status} />
+                <p className="stat-value" style={{ fontSize: 24 }}>
+                  {count}
+                </p>
+              </div>
             </Card>
-          </Grid>
-        ))}
-      </Grid>
+          ))}
+        </div>
+      </div>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Card variant="outlined">
+      <div className="content-grid dashboard-content-grid">
+          <Card className="recent-cases-card">
             <CardHeader title="Recent cases" />
-            {isMobile ? (
-              <CardContent>
-                <Stack spacing={1.5}>
-                  {dashboard.recentCases.map((caseItem) => (
-                    <Box
-                      key={caseItem._id}
-                      onClick={() => navigate(`/cases/${caseItem._id}`)}
-                      sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, cursor: 'pointer' }}
-                    >
-                      <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="flex-start">
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography fontWeight={800} noWrap>
-                            {caseItem.subjectName}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" noWrap>
-                            {caseItem.clientName}
-                          </Typography>
-                        </Box>
+            <div className="hidden-mobile-table recent-cases-scroll">
+              <table className="data-table" style={{ minWidth: 640 }}>
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Client</th>
+                    <th>Status</th>
+                    <th>Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentCases.map((caseItem) => (
+                    <tr key={caseItem._id} onClick={() => navigate(`/cases/${caseItem._id}`)}>
+                      <td className="strong">{caseItem.subjectName}</td>
+                      <td>{caseItem.clientName}</td>
+                      <td>
                         <StatusChip status={caseItem.status} />
-                      </Stack>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Due {formatDate(caseItem.dueDate)}
-                      </Typography>
-                    </Box>
+                      </td>
+                      <td>{formatDate(caseItem.dueDate)}</td>
+                    </tr>
                   ))}
-                </Stack>
-              </CardContent>
-            ) : (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Subject</TableCell>
-                      <TableCell>Client</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Due</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {dashboard.recentCases.map((caseItem) => (
-                      <TableRow key={caseItem._id} hover onClick={() => navigate(`/cases/${caseItem._id}`)} sx={{ cursor: 'pointer' }}>
-                        <TableCell sx={{ fontWeight: 700 }}>{caseItem.subjectName}</TableCell>
-                        <TableCell>{caseItem.clientName}</TableCell>
-                        <TableCell>
-                          <StatusChip status={caseItem.status} />
-                        </TableCell>
-                        <TableCell>{formatDate(caseItem.dueDate)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-            {dashboard.recentCases.length === 0 && (
-              <CardContent>
-                <Alert severity="info">No cases available yet.</Alert>
-              </CardContent>
-            )}
+                </tbody>
+              </table>
+              {recentCases.length === 0 && (
+                <div style={{ padding: 18 }}>
+                  <Alert>No cases available yet.</Alert>
+                </div>
+              )}
+            </div>
+            <div className="dashboard-case-card-list recent-cases-mobile-scroll">
+              {recentCases.map((caseItem) => (
+                <button type="button" className="case-list-card" key={caseItem._id} onClick={() => navigate(`/cases/${caseItem._id}`)}>
+                  <div className="row-between" style={{ alignItems: 'flex-start' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="strong" style={{ overflowWrap: 'anywhere' }}>
+                        {caseItem.subjectName}
+                      </div>
+                      <div className="muted" style={{ marginTop: 4, overflowWrap: 'anywhere' }}>
+                        {caseItem.clientName}
+                      </div>
+                    </div>
+                    <StatusChip status={caseItem.status} />
+                  </div>
+                  <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+                    Due {formatDate(caseItem.dueDate)}
+                  </div>
+                </button>
+              ))}
+              {recentCases.length === 0 && <Alert>No cases available yet.</Alert>}
+            </div>
           </Card>
-        </Grid>
 
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Stack spacing={2}>
-            <Card variant="outlined">
+          <div className="dashboard-side-panel">
+            <Card>
               <CardHeader title={user.role === 'manager' ? 'Review queue' : 'My focus'} />
-              <CardContent>
-                <Stack spacing={1.5}>
-                  <SummaryRow label="Submitted cases" value={dashboard.stats.pendingReview} />
-                  <SummaryRow label="Due in 7 days" value={dashboard.stats.dueSoon} />
-                  <SummaryRow label="Overdue" value={dashboard.stats.overdue} />
-                </Stack>
+              <CardContent className="stack">
+                <SummaryRow label="Submitted cases" value={dashboard.stats.pendingReview} />
+                <SummaryRow label="Due in 7 days" value={dashboard.stats.dueSoon} />
+                <SummaryRow label="Overdue" value={dashboard.stats.overdue} />
               </CardContent>
             </Card>
 
             {user.role === 'manager' && (
-              <Card variant="outlined">
-                <CardHeader avatar={<GroupsIcon color="action" />} title="Agent workload" />
-                <CardContent>
-                  <Stack spacing={1.5}>
-                    {dashboard.agentWorkload.map((agent) => (
-                      <Box key={agent._id} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-                        <Typography fontWeight={700}>{agent.name}</Typography>
-                        <Typography variant="body2" color="text.secondary">
+              <Card className="agent-workload-card">
+                <CardHeader title="Agent workload" icon={<Users size={20} className="muted" />} />
+                <CardContent className="agent-workload-content">
+                  <div className="agent-workload-scroll">
+                    {agentWorkload.map((agent) => (
+                      <div className="workload-item" key={agent._id}>
+                        <div className="strong">{agent.name}</div>
+                        <div className="muted" style={{ fontSize: 13 }}>
                           {agent.email}
-                        </Typography>
-                        <Stack direction="row" justifyContent="space-between" sx={{ mt: 1 }}>
-                          <Typography variant="body2">Active</Typography>
-                          <Typography variant="body2" fontWeight={800}>
-                            {agent.active}
-                          </Typography>
-                        </Stack>
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2">Total assigned</Typography>
-                          <Typography variant="body2" fontWeight={800}>
-                            {agent.total}
-                          </Typography>
-                        </Stack>
-                      </Box>
+                        </div>
+                        <SummaryRow label="Active" value={agent.active} />
+                        <SummaryRow label="Total assigned" value={agent.total} />
+                      </div>
                     ))}
-                  </Stack>
+                  </div>
                 </CardContent>
               </Card>
             )}
-          </Stack>
-        </Grid>
-      </Grid>
-    </Stack>
+          </div>
+      </div>
+    </div>
   );
 };
 
+const StatCard = ({ icon, label, value }) => (
+  <Card>
+    <div className="stat-card">
+      <div>
+        <p className="stat-label">{label}</p>
+        <p className="stat-value">{value}</p>
+      </div>
+      <div className="icon-tile">{icon}</div>
+    </div>
+  </Card>
+);
+
 const SummaryRow = ({ label, value }) => (
-  <Stack direction="row" justifyContent="space-between" sx={{ bgcolor: '#f8fafc', borderRadius: 1, p: 1.5 }}>
-    <Typography variant="body2" fontWeight={700}>
-      {label}
-    </Typography>
-    <Typography fontWeight={800}>{value}</Typography>
-  </Stack>
+  <div className="summary-row">
+    <span className="muted">{label}</span>
+    <span>{value}</span>
+  </div>
 );

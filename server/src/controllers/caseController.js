@@ -6,6 +6,7 @@ import { canTransition, describeAllowedTransitions } from '../utils/statusMachin
 import { validate } from '../middleware/validate.js';
 
 const objectIdMessage = 'Invalid id';
+const DASHBOARD_ITEM_LIMIT = 10;
 const populateCase = (queryBuilder) =>
   queryBuilder
     .populate('assignedAgent', 'name email role')
@@ -21,6 +22,26 @@ const addAudit = (caseDoc, actor, fromStatus, toStatus, action, note = '') => {
 const ensureCaseAccess = (caseDoc, user) => {
   if (user.role === 'manager') return true;
   return String(caseDoc.assignedAgent?._id || caseDoc.assignedAgent) === String(user._id);
+};
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildCaseFilter = (query, user) => {
+  const filter = {};
+
+  if (user.role === 'agent') filter.assignedAgent = user._id;
+  if (query.status) filter.status = query.status;
+  if (user.role === 'manager' && query.agent) filter.assignedAgent = query.agent;
+  if (query.search) {
+    const search = escapeRegex(query.search);
+    filter.$or = [
+      { clientName: new RegExp(search, 'i') },
+      { subjectName: new RegExp(search, 'i') },
+      { caseType: new RegExp(search, 'i') }
+    ];
+  }
+
+  return filter;
 };
 
 export const createCaseValidation = [
@@ -101,28 +122,22 @@ export const listCases = async (req, res, next) => {
   try {
     const page = req.query.page || 1;
     const limit = req.query.limit || 10;
-    const filter = {};
-
-    if (req.user.role === 'agent') filter.assignedAgent = req.user._id;
-    if (req.query.status) filter.status = req.query.status;
-    if (req.user.role === 'manager' && req.query.agent) filter.assignedAgent = req.query.agent;
-    if (req.query.search) {
-      const search = req.query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.$or = [
-        { clientName: new RegExp(search, 'i') },
-        { subjectName: new RegExp(search, 'i') },
-        { caseType: new RegExp(search, 'i') }
-      ];
-    }
+    const skip = (page - 1) * limit;
+    const filter = buildCaseFilter(req.query, req.user);
 
     const [items, total] = await Promise.all([
-      populateCase(Case.find(filter).sort({ updatedAt: -1 }).skip((page - 1) * limit).limit(limit)),
+      populateCase(Case.find(filter).sort({ updatedAt: -1 }).skip(skip).limit(limit).lean()),
       Case.countDocuments(filter)
     ]);
 
     res.json({
       cases: items,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 }
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / limit))
+      }
     });
   } catch (error) {
     next(error);
@@ -154,7 +169,7 @@ export const getDashboard = async (req, res, next) => {
         dueDate: { $gte: now, $lte: dueSoonLimit },
         status: { $nin: ['Cleared'] }
       }),
-      populateCase(Case.find(filter).sort({ updatedAt: -1 }).limit(6)),
+      populateCase(Case.find(filter).sort({ updatedAt: -1 }).limit(DASHBOARD_ITEM_LIMIT).lean()),
       req.user.role === 'manager'
         ? User.aggregate([
             { $match: { role: 'agent', active: true } },
@@ -182,7 +197,8 @@ export const getDashboard = async (req, res, next) => {
                 }
               }
             },
-            { $sort: { active: -1, name: 1 } }
+            { $sort: { active: -1, name: 1 } },
+            { $limit: DASHBOARD_ITEM_LIMIT }
           ])
         : Promise.resolve([])
     ]);

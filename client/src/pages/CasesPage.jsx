@@ -1,397 +1,368 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
-  Pagination,
-  Select,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  useMediaQuery,
-  useTheme,
-  Typography
-} from '@mui/material';
-import Grid from '@mui/material/Grid2';
-import AddIcon from '@mui/icons-material/Add';
-import SearchIcon from '@mui/icons-material/Search';
 import { Controller, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
+import { Plus, Search } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import {
-  getFieldErrors,
-  getErrorMessage,
-  useCreateCaseMutation,
-  useGetAgentsQuery,
-  useGetCasesQuery,
-  useGetDashboardQuery
-} from '../api/apiSlice';
+import { getFieldErrors, getErrorMessage } from '../api/errorUtils';
+import { Alert, Button, Card, Dialog, Field, Input, Select } from '../components/ui';
 import { StatusChip } from '../components/StatusChip';
+import { useCreateCaseMutation, useGetCasesQuery, useGetDashboardQuery } from '../features/cases/casesApi';
+import { useGetAgentsQuery } from '../features/users/usersApi';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatDate, isPastDate, isValidDate, todayInputValue } from '../utils/date';
 import { caseTypes, statuses } from '../utils/status';
 
+const CASES_LIMIT = 10;
 const emptyForm = { clientName: '', subjectName: '', caseType: 'KYC', dueDate: '', assignedAgent: '' };
 
 export const CasesPage = ({ createOnMount = false }) => {
   const user = useSelector((state) => state.auth.user);
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [filters, setFilters] = useState({ search: '', status: '', agent: '', page: 1 });
   const [dialogOpen, setDialogOpen] = useState(false);
-  const {
-    control,
-    handleSubmit,
-    reset,
-    setError,
-    formState: { errors }
-  } = useForm({ defaultValues: emptyForm });
+  const debouncedSearch = useDebouncedValue(filters.search.trim(), 400);
+  const form = useForm({ defaultValues: emptyForm });
 
-  const params = useMemo(() => {
-    const result = { page: filters.page, limit: 10 };
-    if (filters.search) result.search = filters.search;
-    if (filters.status) result.status = filters.status;
-    if (filters.agent) result.agent = filters.agent;
-    return result;
-  }, [filters]);
+  const queryParams = useMemo(
+    () => buildCaseQueryParams(filters, debouncedSearch),
+    [debouncedSearch, filters.agent, filters.page, filters.status]
+  );
 
-  const { data: caseData, error: casesError, isFetching } = useGetCasesQuery(params);
+  const { data: caseData, error: casesError, isFetching } = useGetCasesQuery(queryParams);
   const { data: dashboardData } = useGetDashboardQuery();
   const { data: agentsData } = useGetAgentsQuery(undefined, { skip: user.role !== 'manager' });
   const [createCase, { isLoading: creatingCase, error: createError }] = useCreateCaseMutation();
+
+  const cases = caseData?.cases || [];
+  const agents = agentsData?.agents || [];
+  const pagination = caseData?.pagination || { page: filters.page, pages: 1 };
+  const statusCounts = dashboardData?.stats?.statusCounts || {};
+  const error = casesError || createError;
 
   useEffect(() => {
     if (createOnMount && user.role === 'manager') setDialogOpen(true);
   }, [createOnMount, user.role]);
 
+  const updateFilter = (field, value) => {
+    setFilters((current) => ({ ...current, [field]: value, page: 1 }));
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    if (createOnMount) navigate('/cases');
+  };
+
   const submitCase = async (values) => {
     try {
-      await createCase({
-        ...values,
-        clientName: values.clientName.trim(),
-        subjectName: values.subjectName.trim(),
-        assignedAgent: values.assignedAgent || undefined
-      }).unwrap();
+      await createCase(normalizeCasePayload(values)).unwrap();
       toast.success('Case created successfully');
-      setDialogOpen(false);
-      reset(emptyForm);
-      if (createOnMount) navigate('/cases');
+      form.reset(emptyForm);
+      closeDialog();
     } catch (err) {
-      const fieldErrors = getFieldErrors(err);
-      Object.entries(fieldErrors).forEach(([field, message]) => {
-        setError(field, { type: 'server', message });
-      });
+      showServerFieldErrors(err, form.setError);
       toast.error(getErrorMessage(err));
     }
   };
 
-  const cases = caseData?.cases || [];
-  const pagination = caseData?.pagination || { page: filters.page, pages: 1, total: 0 };
-  const agents = agentsData?.agents || [];
-  const statusCounts = dashboardData?.stats?.statusCounts || {};
-  const statCounts = statuses.map((status) => ({ status, count: statusCounts[status] || 0 }));
-  const error = casesError || createError;
-
   return (
-    <Stack spacing={3}>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
-        <Box>
-          <Typography variant="h4" fontWeight={800}>
-            Cases
-          </Typography>
-          <Typography color="text.secondary">
-            {user.role === 'manager' ? 'Review and assign client cases.' : 'Work on cases assigned to you.'}
-          </Typography>
-        </Box>
-        {user.role === 'manager' && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cases/new')} sx={{ width: { xs: '100%', sm: 'auto' } }}>
-            New case
-          </Button>
-        )}
-      </Stack>
-
-      <Grid container spacing={2}>
-        {statCounts.map(({ status, count }) => (
-          <Grid size={{ xs: 6, sm: 4, lg: 2 }} key={status}>
-            <Card variant="outlined" sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography variant="body2" color="text.secondary" fontWeight={700}>
-                  {status}
-                </Typography>
-                <Typography variant="h5" fontWeight={800}>
-                  {count}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, lg: user.role === 'manager' ? 6 : 8 }}>
-              <TextField
-                fullWidth
-                label="Search"
-                placeholder="Client, subject, or type"
-                value={filters.search}
-                onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value, page: 1 }))}
-                InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  label="Status"
-                  value={filters.status}
-                  onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value, page: 1 }))}
-                >
-                  <MenuItem value="">All statuses</MenuItem>
-                  {statuses.map((status) => (
-                    <MenuItem value={status} key={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            {user.role === 'manager' && (
-              <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Agent</InputLabel>
-                  <Select
-                    label="Agent"
-                    value={filters.agent}
-                    onChange={(event) => setFilters((prev) => ({ ...prev, agent: event.target.value, page: 1 }))}
-                  >
-                    <MenuItem value="">All agents</MenuItem>
-                    {agents.map((agent) => (
-                      <MenuItem value={agent.id} key={agent.id}>
-                        {agent.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {error && <Alert severity="error">{getErrorMessage(error)}</Alert>}
-
-      <Card variant="outlined">
-        {isMobile ? (
-          <CardContent>
-            <Stack spacing={1.5}>
-              {cases.map((caseItem) => (
-                <Box
-                  key={caseItem._id}
-                  onClick={() => navigate(`/cases/${caseItem._id}`)}
-                  sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, cursor: 'pointer' }}
-                >
-                  <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="flex-start">
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography fontWeight={800} noWrap>
-                        {caseItem.subjectName}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        {caseItem.clientName}
-                      </Typography>
-                    </Box>
-                    <StatusChip status={caseItem.status} />
-                  </Stack>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
-                    <Chip label={caseItem.caseType} size="small" variant="outlined" />
-                    <Chip label={caseItem.assignedAgent?.name || 'Unassigned'} size="small" variant="outlined" />
-                    <Chip label={`Due ${formatDate(caseItem.dueDate)}`} size="small" variant="outlined" />
-                  </Stack>
-                </Box>
-              ))}
-            </Stack>
-          </CardContent>
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Client</TableCell>
-                  <TableCell>Subject</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Agent</TableCell>
-                  <TableCell>Due</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {cases.map((caseItem) => (
-                  <TableRow key={caseItem._id} hover onClick={() => navigate(`/cases/${caseItem._id}`)} sx={{ cursor: 'pointer' }}>
-                    <TableCell>{caseItem.clientName}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>{caseItem.subjectName}</TableCell>
-                    <TableCell>
-                      <Chip label={caseItem.caseType} size="small" variant="outlined" />
-                    </TableCell>
-                    <TableCell>
-                      <StatusChip status={caseItem.status} />
-                    </TableCell>
-                    <TableCell>{caseItem.assignedAgent?.name || 'Unassigned'}</TableCell>
-                    <TableCell>{formatDate(caseItem.dueDate)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-        {!isFetching && cases.length === 0 && (
-          <CardContent>
-            <Alert severity="info">No cases match the current filters.</Alert>
-          </CardContent>
-        )}
-      </Card>
-
-      <Stack alignItems="center">
-        <Pagination
-          count={pagination.pages}
-          page={pagination.page}
-          onChange={(_event, page) => setFilters((prev) => ({ ...prev, page }))}
-          color="primary"
-        />
-      </Stack>
-
-      <Dialog
-        open={dialogOpen}
-        onClose={() => {
-          setDialogOpen(false);
-          if (createOnMount) navigate('/cases');
-        }}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Create case</DialogTitle>
-        <Stack component="form" id="create-case-form" spacing={2} onSubmit={handleSubmit(submitCase)}>
-          <DialogContent>
-            <Stack spacing={2}>
-              <Controller
-                name="clientName"
-                control={control}
-                rules={{
-                  validate: (value) => value.trim().length >= 2 || 'Client name must be at least 2 characters',
-                  maxLength: { value: 120, message: 'Client name is too long' }
-                }}
-                render={({ field }) => (
-                  <TextField {...field} label="Client name" error={Boolean(errors.clientName)} helperText={errors.clientName?.message} inputProps={{ maxLength: 120 }} required fullWidth />
-                )}
-              />
-              <Controller
-                name="subjectName"
-                control={control}
-                rules={{
-                  validate: (value) => value.trim().length >= 2 || 'Subject name must be at least 2 characters',
-                  maxLength: { value: 120, message: 'Subject name is too long' }
-                }}
-                render={({ field }) => (
-                  <TextField {...field} label="Subject name" error={Boolean(errors.subjectName)} helperText={errors.subjectName?.message} inputProps={{ maxLength: 120 }} required fullWidth />
-                )}
-              />
-              <Controller
-                name="caseType"
-                control={control}
-                rules={{ validate: (value) => caseTypes.includes(value) || 'Select a valid case type' }}
-                render={({ field }) => (
-                  <FormControl fullWidth error={Boolean(errors.caseType)}>
-                    <InputLabel>Case type</InputLabel>
-                    <Select {...field} label="Case type">
-                      {caseTypes.map((type) => (
-                        <MenuItem value={type} key={type}>
-                          {type}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.caseType && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
-                        {errors.caseType.message}
-                      </Typography>
-                    )}
-                  </FormControl>
-                )}
-              />
-              <Controller
-                name="dueDate"
-                control={control}
-                rules={{
-                  required: 'Due date is required',
-                  validate: (value) => {
-                    if (!isValidDate(value)) return 'Enter a valid due date';
-                    return !isPastDate(value) || 'Due date cannot be in the past';
-                  }
-                }}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    label="Due date"
-                    type="date"
-                    error={Boolean(errors.dueDate)}
-                    helperText={errors.dueDate?.message}
-                    InputLabelProps={{ shrink: true }}
-                    inputProps={{ min: todayInputValue() }}
-                    required
-                    fullWidth
-                  />
-                )}
-              />
-              <Controller
-                name="assignedAgent"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth>
-                    <InputLabel>Assign agent</InputLabel>
-                    <Select {...field} label="Assign agent">
-                      <MenuItem value="">Leave unassigned</MenuItem>
-                      {agents.map((agent) => (
-                        <MenuItem value={agent.id} key={agent.id}>
-                          {agent.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => {
-                setDialogOpen(false);
-                if (createOnMount) navigate('/cases');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" disabled={creatingCase}>
-              Create
-            </Button>
-          </DialogActions>
-        </Stack>
-      </Dialog>
-    </Stack>
+    <div className="cases-page">
+      <CasesHeader user={user} onCreate={() => navigate('/cases/new')} />
+      <StatusStats statusCounts={statusCounts} />
+      <CaseFilters filters={filters} agents={agents} user={user} onFilterChange={updateFilter} />
+      {error && <Alert variant="error">{getErrorMessage(error)}</Alert>}
+      <CasesList cases={cases} isFetching={isFetching} onOpenCase={(caseId) => navigate(`/cases/${caseId}`)} />
+      <CasesPagination pagination={pagination} onPageChange={(page) => setFilters((current) => ({ ...current, page }))} />
+      <CreateCaseDialog agents={agents} form={form} open={dialogOpen} isSubmitting={creatingCase} onClose={closeDialog} onSubmit={submitCase} />
+    </div>
   );
 };
+
+const buildCaseQueryParams = (filters, debouncedSearch) => {
+  const params = { page: filters.page, limit: CASES_LIMIT };
+  if (debouncedSearch) params.search = debouncedSearch;
+  if (filters.status) params.status = filters.status;
+  if (filters.agent) params.agent = filters.agent;
+  return params;
+};
+
+const normalizeCasePayload = (values) => ({
+  ...values,
+  clientName: values.clientName.trim(),
+  subjectName: values.subjectName.trim(),
+  assignedAgent: values.assignedAgent || undefined
+});
+
+const showServerFieldErrors = (error, setError) => {
+  Object.entries(getFieldErrors(error)).forEach(([field, message]) => {
+    setError(field, { type: 'server', message });
+  });
+};
+
+const CasesHeader = ({ user, onCreate }) => (
+  <div className="page-header">
+    <div>
+      <h1 className="page-title">Cases</h1>
+      <p className="page-subtitle">{user.role === 'manager' ? 'Review and assign client cases.' : 'Work on cases assigned to you.'}</p>
+    </div>
+    {user.role === 'manager' && (
+      <Button type="button" onClick={onCreate}>
+        <Plus size={20} />
+        New case
+      </Button>
+    )}
+  </div>
+);
+
+const StatusStats = ({ statusCounts }) => (
+  <div className="stats-grid">
+    {statuses.map((status) => (
+      <Card key={status}>
+        <div className="stat-card">
+          <div>
+            <p className="stat-label">{status}</p>
+            <p className="stat-value">{statusCounts[status] || 0}</p>
+          </div>
+        </div>
+      </Card>
+    ))}
+  </div>
+);
+
+const CaseFilters = ({ filters, agents, user, onFilterChange }) => (
+  <Card className="filters-card">
+    <div className={user.role === 'manager' ? 'filters-grid' : 'filters-grid agent-filters'}>
+      <Field label="Search">
+        <div className="input-with-icon">
+          <Search size={20} />
+          <Input
+            placeholder="Client, subject, or type"
+            value={filters.search}
+            onChange={(event) => onFilterChange('search', event.target.value)}
+          />
+        </div>
+      </Field>
+      <Field label="Status">
+        <Select value={filters.status} onChange={(event) => onFilterChange('status', event.target.value)}>
+          <option value="">All statuses</option>
+          {statuses.map((status) => (
+            <option value={status} key={status}>
+              {status}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {user.role === 'manager' && (
+        <Field label="Agent">
+          <Select value={filters.agent} onChange={(event) => onFilterChange('agent', event.target.value)}>
+            <option value="">All agents</option>
+            {agents.map((agent) => (
+              <option value={agent.id} key={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+    </div>
+  </Card>
+);
+
+const CasesList = ({ cases, isFetching, onOpenCase }) => (
+  <Card className="table-card">
+    <div className="table-scroll desktop-table">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th style={{ width: '22%' }}>Client</th>
+            <th style={{ width: '22%' }}>Subject</th>
+            <th style={{ width: '14%' }}>Type</th>
+            <th style={{ width: '16%' }}>Status</th>
+            <th style={{ width: '14%' }}>Agent</th>
+            <th style={{ width: '12%' }}>Due</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cases.map((caseItem) => (
+            <tr key={caseItem._id} onClick={() => onOpenCase(caseItem._id)}>
+              <td>{caseItem.clientName}</td>
+              <td className="strong">{caseItem.subjectName}</td>
+              <td>
+                <span className="badge">{caseItem.caseType}</span>
+              </td>
+              <td>
+                <StatusChip status={caseItem.status} />
+              </td>
+              <td>{caseItem.assignedAgent?.name || 'Unassigned'}</td>
+              <td>{formatDate(caseItem.dueDate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!isFetching && cases.length === 0 && <Alert>No cases match the current filters.</Alert>}
+    </div>
+    <div className="case-card-list">
+      {cases.map((caseItem) => (
+        <button type="button" className="case-list-card" key={caseItem._id} onClick={() => onOpenCase(caseItem._id)}>
+          <div className="row-between" style={{ alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0, textAlign: 'left' }}>
+              <div className="strong" style={{ overflowWrap: 'anywhere' }}>
+                {caseItem.subjectName}
+              </div>
+              <div className="muted" style={{ marginTop: 4, overflowWrap: 'anywhere' }}>
+                {caseItem.clientName}
+              </div>
+            </div>
+            <StatusChip status={caseItem.status} />
+          </div>
+          <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+            <span className="badge">{caseItem.caseType}</span>
+            <span className="badge">{caseItem.assignedAgent?.name || 'Unassigned'}</span>
+            <span className="badge">Due {formatDate(caseItem.dueDate)}</span>
+          </div>
+        </button>
+      ))}
+      {!isFetching && cases.length === 0 && <Alert>No cases match the current filters.</Alert>}
+    </div>
+  </Card>
+);
+
+const CasesPagination = ({ pagination, onPageChange }) => {
+  if (pagination.pages <= 1) return null;
+
+  return (
+    <div className="pagination">
+      <Button type="button" variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => onPageChange(pagination.page - 1)}>
+        Previous
+      </Button>
+      <span className="badge badge-blue">{pagination.page}</span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pagination.page >= pagination.pages}
+        onClick={() => onPageChange(pagination.page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+};
+
+const CreateCaseDialog = ({ agents, form, open, isSubmitting, onClose, onSubmit }) => {
+  const {
+    control,
+    handleSubmit,
+    formState: { errors }
+  } = form;
+
+  return (
+    <Dialog open={open} title="Create case" onClose={onClose}>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <div className="dialog-body">
+          <ControlledTextField
+            control={control}
+            errors={errors}
+            name="clientName"
+            label="Client name"
+            rules={{
+              validate: (value) => value.trim().length >= 2 || 'Client name must be at least 2 characters',
+              maxLength: { value: 120, message: 'Client name is too long' }
+            }}
+          />
+          <ControlledTextField
+            control={control}
+            errors={errors}
+            name="subjectName"
+            label="Subject name"
+            rules={{
+              validate: (value) => value.trim().length >= 2 || 'Subject name must be at least 2 characters',
+              maxLength: { value: 120, message: 'Subject name is too long' }
+            }}
+          />
+          <CaseTypeField control={control} error={errors.caseType} />
+          <DueDateField control={control} error={errors.dueDate} />
+          <AgentField agents={agents} control={control} />
+        </div>
+        <div className="dialog-actions">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Creating...' : 'Create'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+};
+
+const ControlledTextField = ({ control, errors, name, label, rules }) => (
+  <Controller
+    name={name}
+    control={control}
+    rules={rules}
+    render={({ field }) => (
+      <Field label={label} error={errors[name]?.message}>
+        <Input {...field} maxLength={120} required />
+      </Field>
+    )}
+  />
+);
+
+const CaseTypeField = ({ control, error }) => (
+  <Controller
+    name="caseType"
+    control={control}
+    rules={{ validate: (value) => caseTypes.includes(value) || 'Select a valid case type' }}
+    render={({ field }) => (
+      <Field label="Case type" error={error?.message}>
+        <Select {...field}>
+          {caseTypes.map((type) => (
+            <option value={type} key={type}>
+              {type}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    )}
+  />
+);
+
+const DueDateField = ({ control, error }) => (
+  <Controller
+    name="dueDate"
+    control={control}
+    rules={{
+      required: 'Due date is required',
+      validate: (value) => {
+        if (!isValidDate(value)) return 'Enter a valid due date';
+        return !isPastDate(value) || 'Due date cannot be in the past';
+      }
+    }}
+    render={({ field }) => (
+      <Field label="Due date" error={error?.message}>
+        <Input {...field} type="date" min={todayInputValue()} required />
+      </Field>
+    )}
+  />
+);
+
+const AgentField = ({ agents, control }) => (
+  <Controller
+    name="assignedAgent"
+    control={control}
+    render={({ field }) => (
+      <Field label="Assign agent">
+        <Select {...field}>
+          <option value="">Leave unassigned</option>
+          {agents.map((agent) => (
+            <option value={agent.id} key={agent.id}>
+              {agent.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    )}
+  />
+);

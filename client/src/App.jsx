@@ -1,13 +1,22 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { CaseDetailPage } from './pages/CaseDetailPage';
-import { CasesPage } from './pages/CasesPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { LoginPage } from './pages/LoginPage';
+import { Alert } from './components/ui';
 
-export const App = () => {
-  return (
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const CasesPage = lazy(() => import('./pages/CasesPage').then((module) => ({ default: module.CasesPage })));
+const CaseDetailPage = lazy(() => import('./pages/CaseDetailPage').then((module) => ({ default: module.CaseDetailPage })));
+
+const PageLoader = () => (
+  <div className="page-shell">
+    <Alert>Loading...</Alert>
+  </div>
+);
+
+export const App = () => (
+  <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -53,5 +62,5 @@ export const App = () => {
       />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
-  );
-};
+  </Suspense>
+);

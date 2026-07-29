@@ -4,7 +4,7 @@ import { connectDb } from './config/db.js';
 
 dotenv.config();
 
-const port = process.env.PORT || 5001;
+const port = process.env.PORT || 3500;
 
 connectDb()
   .then(() => {

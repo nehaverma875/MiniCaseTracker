@@ -1,30 +1,10 @@
 import { useState } from 'react';
-import {
-  AppBar,
-  Avatar,
-  Box,
-  Button,
-  Container,
-  Divider,
-  Drawer,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  Toolbar,
-  Typography
-} from '@mui/material';
-import BriefcaseIcon from '@mui/icons-material/WorkOutline';
-import DashboardIcon from '@mui/icons-material/DashboardOutlined';
-import LogoutIcon from '@mui/icons-material/Logout';
-import MenuIcon from '@mui/icons-material/Menu';
-import CloseIcon from '@mui/icons-material/Close';
+import { BriefcaseBusiness, LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { apiSlice } from '../api/apiSlice';
+import { baseApi } from '../api/baseApi';
 import { logout } from '../features/auth/authSlice';
+import { Button, cn } from './ui';
 
 export const AppShell = ({ children }) => {
   const user = useSelector((state) => state.auth.user);
@@ -32,10 +12,12 @@ export const AppShell = ({ children }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  const isCasesListPage = pathname === '/cases' || pathname === '/cases/new';
+  const isDashboardPage = pathname === '/dashboard';
 
   const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
-    { label: 'Cases', path: '/cases', icon: <BriefcaseIcon /> }
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Cases', path: '/cases', icon: BriefcaseBusiness }
   ];
 
   const goTo = (to) => {
@@ -45,78 +27,76 @@ export const AppShell = ({ children }) => {
 
   const signOut = () => {
     dispatch(logout());
-    dispatch(apiSlice.util.resetApiState());
+    dispatch(baseApi.util.resetApiState());
     navigate('/login');
     setOpen(false);
   };
 
-  const navList = (
-    <Box sx={{ width: 280 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2 }}>
-        <Box>
-          <Typography fontWeight={800}>Mini Case Tracker</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {user?.email}
-          </Typography>
-        </Box>
-        <IconButton onClick={() => setOpen(false)} aria-label="Close menu">
-          <CloseIcon />
-        </IconButton>
-      </Stack>
-      <Divider />
-      <List>
-        {navItems.map((item) => (
-          <ListItemButton key={item.path} selected={pathname === item.path || pathname.startsWith(`${item.path}/`)} onClick={() => goTo(item.path)}>
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        ))}
-        <ListItemButton onClick={signOut}>
-          <ListItemIcon>
-            <LogoutIcon />
-          </ListItemIcon>
-          <ListItemText primary="Sign out" />
-        </ListItemButton>
-      </List>
-    </Box>
-  );
-
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar>
-          <IconButton edge="start" onClick={() => setOpen(true)} sx={{ mr: 1, display: { md: 'none' } }} aria-label="Open menu">
-            <MenuIcon />
-          </IconButton>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flexGrow: 1 }}>
-            <Avatar sx={{ bgcolor: 'primary.main', width: 38, height: 38 }}>M</Avatar>
-            <Box>
-              <Typography fontWeight={800} lineHeight={1}>
-                Mini Case Tracker
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {user?.name} / {user?.role}
-              </Typography>
-            </Box>
-          </Stack>
-          <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', md: 'flex' } }}>
-            {navItems.map((item) => (
-              <Button key={item.path} color="inherit" startIcon={item.icon} onClick={() => goTo(item.path)}>
+    <div className="app-shell">
+      <header className="topbar">
+        <button type="button" className="icon-btn mobile-menu-btn" onClick={() => setOpen(true)} aria-label="Open menu">
+          <Menu size={24} />
+        </button>
+        <div className="brand">
+          <div className="avatar">{user?.name?.[0] || 'M'}</div>
+          <div style={{ minWidth: 0 }}>
+            <h1 className="brand-title">Mini Case Tracker</h1>
+            <p className="brand-subtitle">
+              {user?.name} / {user?.role}
+            </p>
+          </div>
+        </div>
+        <nav className="nav-actions" aria-label="Primary navigation">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Button key={item.path} variant="ghost" onClick={() => goTo(item.path)}>
+                <Icon size={20} />
                 {item.label}
               </Button>
-            ))}
-            <Button color="inherit" startIcon={<LogoutIcon />} onClick={signOut}>
-              Sign out
-            </Button>
-          </Stack>
-        </Toolbar>
-      </AppBar>
-      <Drawer open={open} onClose={() => setOpen(false)}>
-        {navList}
-      </Drawer>
-      <Container maxWidth="xl" sx={{ py: 3 }}>
-        {children}
-      </Container>
-    </Box>
+            );
+          })}
+          <Button variant="ghost" onClick={signOut}>
+            <LogOut size={20} />
+            Sign out
+          </Button>
+        </nav>
+      </header>
+
+      {open && (
+        <aside className="dialog-backdrop" onMouseDown={() => setOpen(false)}>
+          <div className="dialog" style={{ width: 300, marginLeft: 0, justifySelf: 'start', height: '100%' }} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="dialog-header">
+              <div>
+                <h2>Mini Case Tracker</h2>
+                <p className="drawer-subtitle">{user?.email}</p>
+              </div>
+              <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close menu">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="dialog-body">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.path || pathname.startsWith(`${item.path}/`);
+                return (
+                  <Button key={item.path} variant={active ? 'primary' : 'ghost'} onClick={() => goTo(item.path)} className="drawer-btn">
+                    <Icon size={20} />
+                    {item.label}
+                  </Button>
+                );
+              })}
+              <Button variant="ghost" onClick={signOut} className="drawer-btn">
+                <LogOut size={20} />
+                Sign out
+              </Button>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      <main className={cn('page-shell', isCasesListPage && 'cases-lock', isDashboardPage && 'dashboard-lock')}>{children}</main>
+    </div>
   );
 };
