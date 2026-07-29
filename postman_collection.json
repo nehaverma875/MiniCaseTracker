@@ -1,0 +1,67 @@
+{
+  "info": {
+    "name": "Mini Case Tracker API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5001/api" },
+    { "key": "token", "value": "" },
+    { "key": "caseId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login Manager",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"manager@example.com\",\n  \"password\": \"Password123!\"\n}"
+        }
+      }
+    },
+    {
+      "name": "List Cases",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/cases?page=1&limit=10"
+      }
+    },
+    {
+      "name": "Create Case",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/cases",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientName\": \"Demo Client\",\n  \"subjectName\": \"Demo Subject\",\n  \"caseType\": \"KYC\",\n  \"dueDate\": \"2026-08-15\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Get Case",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/cases/{{caseId}}"
+      }
+    },
+    {
+      "name": "Add Comment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/cases/{{caseId}}/comments",
+        "body": { "mode": "raw", "raw": "{\n  \"body\": \"Checked supporting documents.\"\n}" }
+      }
+    }
+  ]
+}
