@@ -13,7 +13,7 @@ export const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [login, { isLoading }] = useLoginMutation();
-  const [form, setForm] = useState({ email: 'manager@test.com', password: 'password' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -57,6 +57,7 @@ export const LoginPage = () => {
             <Field label="Email">
               <Input
                 type="email"
+                placeholder="you@example.com"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                 required
@@ -65,6 +66,7 @@ export const LoginPage = () => {
             <Field label="Password">
               <Input
                 type="password"
+                placeholder="Enter password"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
                 required
@@ -74,10 +76,6 @@ export const LoginPage = () => {
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-          <div className="summary-pill muted" style={{ fontSize: 13 }}>
-            <div>Manager: manager@test.com / password</div>
-            <div>Agent: agent@test.com / password</div>
-          </div>
         </CardContent>
       </Card>
     </div>

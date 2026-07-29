@@ -113,7 +113,8 @@ Frontend on Vercel/Netlify:
 - Root directory: `client`
 - Build command: `npm run build`
 - Publish directory: `dist`
-- Update `client/src/api/config.js` with the deployed backend URL before building.
+- Set `VITE_API_ORIGIN` to your deployed backend origin, for example `https://your-backend.onrender.com`.
+- Local development falls back to `http://localhost:3500` automatically.
 
 MongoDB:
 
