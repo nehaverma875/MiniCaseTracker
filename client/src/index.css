@@ -174,7 +174,7 @@
   }
 
   .agent-workload-card {
-    @apply flex min-h-56 flex-1 flex-col overflow-hidden;
+    @apply hidden min-h-56 flex-1 flex-col overflow-hidden lg:flex;
   }
 
   .agent-workload-content {
