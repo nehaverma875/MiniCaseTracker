@@ -4,8 +4,8 @@ A responsive MERN app for replacing a spreadsheet-based ops workflow. Managers c
 
 ## Live Demo
 
-Frontend: https://mini-case-tracker-1pzd.vercel.app  
-Backend: https://minicasetracker.onrender.com
+- Frontend: https://mini-case-tracker-1pzd.vercel.app
+- Backend: https://minicasetracker.onrender.com
 
 ## Stack
 
@@ -81,8 +81,10 @@ npm run seed
 npm run dev
 ```
 
-Frontend: http://localhost:5173  
-Backend health: http://localhost:3500/api/health
+Local URLs:
+
+- Local frontend: http://localhost:5173
+- Local backend API: http://localhost:3500/api
 
 For a Lighthouse/performance check, run the production build instead of the Vite dev server:
 
