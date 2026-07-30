@@ -2,6 +2,11 @@
 
 A responsive MERN app for replacing a spreadsheet-based ops workflow. Managers create and assign cases, agents upload documents and notes, and managers review submitted work as Cleared or Discrepant.
 
+## Live Demo
+
+Frontend: https://mini-case-tracker-1pzd.vercel.app  
+Backend: https://minicasetracker.onrender.com
+
 ## Stack
 
 - React + Vite + Tailwind CSS + shadcn-style component primitives
